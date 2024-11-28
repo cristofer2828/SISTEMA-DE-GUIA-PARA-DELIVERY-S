@@ -1,103 +1,196 @@
-# Función para dibujar el mapa cartesiano básico en consola
-def dibujar_mapa(ubicaciones, repartidor_pos=None):
-    # Definir tamaño del mapa (un plano de 10x10 para simular un mapa cartesiano)
-    max_x = 10
-    max_y = 10
-    
-    # Crear una cuadrícula vacía de 10x10
-    mapa = [['.' for _ in range(max_x)] for _ in range(max_y)]
-    
-    # Colocar el repartidor en el mapa
-    if repartidor_pos:
-        x, y = repartidor_pos
-        mapa[max_y - y - 1][x] = 'R'
-    
-    # Colocar las ubicaciones de los clientes en el mapa
-    for nombre, (x, y) in ubicaciones.items():
-        if nombre != "Repartidor":  # No poner un cliente sobre el repartidor
-            if 0 <= x < max_x and 0 <= y < max_y:
-                mapa[max_y - y - 1][x] = 'C'  # Usamos 'C' para los clientes
-    
-    # Dibujar el mapa
-    print("\nMapa de ubicaciones (R = Repartidor, C = Cliente):")
-    for fila in mapa:
+import random
+import time
+from collections import deque
+
+# Generar mapa 
+def generar_mapa(tam_x, tam_y, ubic_sede):
+    num_obstaculos = (tam_x * tam_y) // 5  # Más obstáculos en matrices grandes
+    mapa = [['.' for _ in range(tam_x)] for _ in range(tam_y)]
+    obstaculos = [
+        (random.randint(1, tam_x), random.randint(1, tam_y))
+        for _ in range(num_obstaculos)
+    ]
+    for x, y in obstaculos:
+        if (x, y) != tuple(ubic_sede):  # Evitar colocar obstáculos en la sede
+            mapa[tam_y - y][x - 1] = 'X'
+    return mapa
+
+# Generarción del repartidor cerca de la sede
+def posicion_repartidor(ubic_sede, tam_x, tam_y):
+    x_s, y_s = ubic_sede
+    posibles = [
+        (x_s + dx, y_s + dy)
+        for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]
+        if 1 <= x_s + dx <= tam_x and 1 <= y_s + dy <= tam_y
+    ]
+    return random.choice(posibles)
+
+# Dibujar mapa
+def dibujar_mapa(mapa, ubic_repartidor=None, ubic_cliente=None, recorrido=None):
+    mapa_dibujado = [fila[:] for fila in mapa]
+    tam_y = len(mapa_dibujado)
+    if recorrido:
+        for x, y in recorrido:
+            mapa_dibujado[tam_y - y][x - 1] = 'O'
+    if ubic_repartidor:
+        x_r, y_r = ubic_repartidor
+        mapa_dibujado[tam_y - y_r][x_r - 1] = 'R'
+    if ubic_cliente:
+        x_c, y_c = ubic_cliente
+        mapa_dibujado[tam_y - y_c][x_c - 1] = 'C'
+    print("\nMapa actual:")
+    for fila in mapa_dibujado:
         print(" ".join(fila))
-    print("\nEl sistema está listo para ingresar las ubicaciones de los clientes.")
 
-# Función para calcular la distancia euclidiana entre dos puntos en metros
-def calcular_distancia(p1, p2):
-    return ((p2[0] - p1[0]) ** 2 + (p2[1] - p1[1]) ** 2) ** 0.5
+# Calcular ruta más corta
+def calcular_ruta(mapa, inicio, destino):
+    tam_x, tam_y = len(mapa[0]), len(mapa)
+    cola = deque([(inicio, [])])
+    visitados = set()
+    while cola:
+        (x, y), camino = cola.popleft()
+        if (x, y) == destino:
+            return camino + [(x, y)]
+        for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+            nx, ny = x + dx, y + dy
+            if 1 <= nx <= tam_x and 1 <= ny <= tam_y and (nx, ny) not in visitados:
+                if mapa[tam_y - ny][nx - 1] != 'X':
+                    visitados.add((nx, ny))
+                    cola.append(((nx, ny), camino + [(x, y)]))
+    return []
 
-# Función para obtener la ruta más corta usando un algoritmo simple de "cercanía"
-def obtener_ruta_optima(ubicaciones):
-    ruta = ["Repartidor"]
-    puntos_restantes = list(ubicaciones.keys())[1:]  # Excluye "Repartidor"
-    ubicacion_actual = "Repartidor"
-    
-    while puntos_restantes:
-        siguiente_cliente = min(puntos_restantes, key=lambda x: calcular_distancia(ubicaciones[ubicacion_actual], ubicaciones[x]))
-        ruta.append(siguiente_cliente)
-        puntos_restantes.remove(siguiente_cliente)
-        ubicacion_actual = siguiente_cliente
+# Mostrar productos disponibles
+def mostrar_productos_disponibles():
+    productos = {
+        1: ("Laptop", 3000),
+        2: ("Smartphone", 1500),
+        3: ("Cargador portátil", 100),
+        4: ("Auriculares", 200),
+        5: ("Reloj inteligente", 800),
+    }
+    print("\n|--- Productos disponibles ---|")
+    for k, (nombre, precio) in productos.items():
+        print(f"{k}. {nombre} - S/. {precio}")
+    print("|-----------------------------|")
+    return productos
 
-    return ruta
+# Agregar productos al carrito
+def agregar_producto_al_carrito(productos, carrito):
+    mostrar_productos_disponibles()
+    try:
+        opcion = int(input("Selecciona el número del producto para agregar al carrito: "))
+        if opcion in productos:
+            carrito.append(productos[opcion])
+            print(f"{productos[opcion][0]} agregado al carrito.")
+        else:
+            print("Producto no válido.")
+    except ValueError:
+        print("Entrada inválida. Ingresa un número.")
 
-# Función para mostrar la ruta en la consola
-def mostrar_ruta(ruta, ubicaciones):
-    print("Ruta de entrega óptima:")
-    print(" -> ".join(ruta))
-    print("\nDetalles de las distancias (en metros):")
-    
-    distancia_total = 0
-    for i in range(len(ruta) - 1):
-        origen = ruta[i]
-        destino = ruta[i + 1]
-        distancia = calcular_distancia(ubicaciones[origen], ubicaciones[destino])
-        distancia_total += distancia
-        print(f"De {origen} a {destino}: {distancia:.2f} metros")
-    
-    print(f"\nDistancia total de la ruta: {distancia_total:.2f} metros")
+# Obtener ubicación del cliente
+def obtener_ubicacion_cliente(tam_x, tam_y):
+    while True:
+        try:
+            x = int(input(f"Ingrese su ubicación X (1-{tam_x}): "))
+            y = int(input(f"Ingrese su ubicación Y (1-{tam_y}): "))
+            if 1 <= x <= tam_x and 1 <= y <= tam_y:
+                return (x, y)
+            else:
+                print(f"Por favor, ingrese valores dentro del rango (1-{tam_x}, 1-{tam_y}).")
+        except ValueError:
+            print("Entrada inválida. Por favor, ingrese números válidos.")
 
-# Función para ingresar las ubicaciones de los clientes
-def ingresar_ubicaciones():
-    ubicaciones = {}
-    repartidor_x = int(input("Ingresa la coordenada X del Repartidor: "))
-    repartidor_y = int(input("Ingresa la coordenada Y del Repartidor: "))
-    ubicaciones["Repartidor"] = (repartidor_x, repartidor_y)
-    
-    # Ingresar clientes
-    num_clientes = int(input("¿Cuántos clientes deseas agregar?: "))
-    
-    for i in range(1, num_clientes + 1):
-        nombre_cliente = f"Cliente {i}"
-        print(f"\nIngresando ubicaciones para {nombre_cliente}:")
-        cliente_x = int(input(f"  Ingresa la coordenada X de {nombre_cliente}: "))
-        cliente_y = int(input(f"  Ingresa la coordenada Y de {nombre_cliente}: "))
-        ubicaciones[nombre_cliente] = (cliente_x, cliente_y)
-    
-    return ubicaciones
+# Procesar compra
+def procesar_compra(carrito, ruta):
+    costo_productos = sum(producto[1] for producto in carrito)
+    costo_delivery = len(ruta) - 1
+    total = costo_productos + costo_delivery
+    print("\n|--- Resumen de la compra ---|")
+    print("Productos:")
+    for producto, precio in carrito:
+        print(f" - {producto}: S/. {precio}")
+    print(f"Delivery: S/. {costo_delivery}")
+    print(f"Total a pagar: S/. {total}")
+    print("|----------------------------|")
 
-# Función principal
+# Cambiar de sede
+def cambiar_sede():
+    sedes = {
+        "San Carlos": (10, 10, [8, 9]),
+        "Abancay": (30, 30, [24, 30]),
+        "Santa Rosa": (25, 25, [7, 21]),
+        "Gamarra": (20, 20, [10, 20]),
+        "Mariátegui": (15, 15, [12, 14]),
+    }
+    print("\n|--- Sedes disponibles ---|")
+    for i, sede in enumerate(sedes.keys(), start=1):
+        print(f"{i}. {sede}")
+    print("|-------------------------|")
+    try:
+        opcion = int(input("Selecciona la sede a la que deseas cambiar: "))
+        if 1 <= opcion <= len(sedes):
+            sede = list(sedes.keys())[opcion - 1]
+            return sede, sedes[sede]
+        else:
+            print("Opción no válida.")
+    except ValueError:
+        print("Entrada inválida.")
+    return None, None
+
+# Mostrar interfaz principal
+def mostrar_interfaz_principal(carrito, sede_actual, ubic_repartidor):
+    print("\n|--- Almacenes ApplesIncopx ---|")
+    print(f"1. Productos en el carrito actuales: {len(carrito)}")
+    print("2. Cambiar de sede")
+    print("3. Ver mapa")
+    print(f"   Sede actual: \"{sede_actual}\", Ubicación repartidor {ubic_repartidor}")
+    print("4. Proceder a comprar")
+    print("5. Salir")
+    print("|---------------------------|")
+
+# Main de ejecución
 def main():
-    # Ingresar ubicaciones de los clientes
-    ubicaciones = ingresar_ubicaciones()
+    carrito = []
+    productos = mostrar_productos_disponibles()
+    sede_actual, (tam_x, tam_y, ubic_sede) = "San Carlos", (10, 10, [8, 9])
+    mapa = generar_mapa(tam_x, tam_y, ubic_sede)
+    ubic_repartidor = posicion_repartidor(ubic_sede, tam_x, tam_y)
 
-    # Mostrar el mapa de ubicaciones inicial
-    dibujar_mapa(ubicaciones, repartidor_pos=ubicaciones["Repartidor"])
-
-    # Obtener la ruta óptima
-    ruta_optima = obtener_ruta_optima(ubicaciones)
-
-    # Mostrar la ruta y las distancias
-    mostrar_ruta(ruta_optima, ubicaciones)
-
-    # Mostrar la ruta del repartidor en el mapa
-    print("\nSimulación de la ruta del repartidor:")
-    posicion_repartidor = ubicaciones["Repartidor"]
-    for paso in ruta_optima[1:]:  # Excluye el repartidor de la ruta inicial
-        print(f"Repartidor se mueve de {posicion_repartidor} a {ubicaciones[paso]}")
-        dibujar_mapa(ubicaciones, repartidor_pos=ubicaciones[paso])
-        posicion_repartidor = ubicaciones[paso]  # Actualizar la posición del repartidor
-
-# Ejecutar el programa
+    while True:
+        mostrar_interfaz_principal(carrito, sede_actual, ubic_repartidor)
+        try:
+            opcion = int(input("Selecciona una opción: "))
+            if opcion == 1:
+                agregar_producto_al_carrito(productos, carrito)
+            elif opcion == 2:
+                nueva_sede, datos_sede = cambiar_sede()
+                if nueva_sede:
+                    sede_actual, (tam_x, tam_y, ubic_sede) = nueva_sede, datos_sede
+                    mapa = generar_mapa(tam_x, tam_y, ubic_sede)
+                    ubic_repartidor = posicion_repartidor(ubic_sede, tam_x, tam_y)
+            elif opcion == 3:
+                dibujar_mapa(mapa, ubic_repartidor=ubic_repartidor)
+            elif opcion == 4:
+                if not carrito:
+                    print("El carrito está vacío. Agrega productos primero.")
+                else:
+                    ubic_cliente = obtener_ubicacion_cliente(tam_x, tam_y)
+                    ruta = calcular_ruta(mapa, tuple(ubic_repartidor), ubic_cliente)
+                    if ruta:
+                        print("\nSimulando recorrido del repartidor:")
+                        for paso in ruta:
+                            time.sleep(0.4)
+                            dibujar_mapa(mapa, paso, ubic_cliente, ruta[:ruta.index(paso) + 1])
+                        procesar_compra(carrito, ruta)
+                        return
+                    else:
+                        print("No se encontró una ruta válida.")
+            elif opcion == 5:
+                print("Gracias por visitar Almacenes ApplesIncopx. ¡Hasta pronto!")
+                return
+            else:
+                print("Opción no válida.")
+        except ValueError:
+            print("Entrada inválida.")
+#Terminar
 main()
